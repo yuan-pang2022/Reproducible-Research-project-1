@@ -1,0 +1,156 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+## Introduction
+
+It is now possible to collect a large amount of data about personal
+movement using activity monitoring devices such as a
+[Fitbit](http://www.fitbit.com), [Nike
+Fuelband](http://www.nike.com/us/en_us/c/nikeplus-fuelband), or
+[Jawbone Up](https://jawbone.com/up). These type of devices are part of
+the "quantified self" movement -- a group of enthusiasts who take
+measurements about themselves regularly to improve their health, to
+find patterns in their behavior, or because they are tech geeks. But
+these data remain under-utilized both because the raw data are hard to
+obtain and there is a lack of statistical methods and software for
+processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring
+device. This device collects data at 5 minute intervals through out the
+day. The data consists of two months of data from an anonymous
+individual collected during the months of October and November, 2012
+and include the number of steps taken in 5 minute intervals each day.
+
+## Data
+
+The data for this assignment was downloaded from thecourse website:
+
+* Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) [52K]
+
+The variables included in this dataset are:
+
+* **steps**: Number of steps taking in a 5-minute interval (missing
+    values are coded as `NA`)
+
+* **date**: The date on which the measurement was taken in YYYY-MM-DD
+    format
+
+* **interval**: Identifier for the 5-minute interval in which
+    measurement was taken
+
+The dataset is stored in a comma-separated-value (CSV) file and there
+are a total of 17,568 observations in this
+dataset.
+
+## Loading and preprocessing the data
+
+If the .csv does not exist unzip from the .zip archive.  It is assumed that the file is in the current directory for this assignment.  No material preprocessing was required to load the data set.
+
+```{r}
+library(data.table)
+
+if(!file.exists("activity.csv")){
+    unzip('activity.zip')
+}
+
+activityData <- data.table(read.csv("activity.csv"))
+```
+
+
+
+## What is mean total number of steps taken per day?
+
+The following data table answers the question about the mean steps per day.
+```{r}
+totalStepsByDay <- activityData[complete.cases(activityData),.(total_steps=sum(steps)),by=.(date)]
+totalStepsByDay
+```
+
+Plot histogram for the total steps by day.
+```{r} 
+hist(totalStepsByDay$total_steps,col="blue",xlab="Total Steps",main="Histogram of Steps Missing Values Excluded")
+
+```
+
+Calculate the mean and median total steps per day.
+```{r means}
+mean(totalStepsByDay$total_steps)
+median(totalStepsByDay$total_steps)
+```
+
+## What is the average daily activity pattern?
+
+```{r meanstep interval}
+meanStepsByInterval <- activityData[complete.cases(activityData),.(step_mean=mean(steps)),by=.(interval)]
+```
+```{r plot}
+plot(meanStepsByInterval,type='l')
+```
+
+The interval that has the maximum number of steps on average is:
+```{r }
+meanStepsByInterval[step_mean==max(meanStepsByInterval$step_mean),]$interval
+```
+
+## Imputing missing values
+
+Missing values can have an impact on the analysis.  In this data set we are missing step data for 2304 intervals.
+
+```{r Check for missing values}
+colSums(is.na(activityData))
+```
+
+In this data set, I've imputed the number of steps for missing values by using the mean steps by interval.  Since the original data ws integer and the mean is not, steps were first converted to numeric.  Then the data table updated for all NA values with the mean for the day.
+
+```{r create new data set}
+imputeAD<-activityData
+#convert to numeric
+imputeAD$steps<-as.numeric(imputeAD$steps)
+#impute step mean and update data table
+imputeAD[is.na(steps),]$steps <- meanStepsByInterval[interval==activityData[is.na(steps),]$interval,step_mean]
+```
+
+Histogram showing steps with imputed values.
+```{r create histogram}
+#create histogram of steps
+hist(imputeAD[,sum(steps),by=date]$V1,col="blue",main="Histogram of Steps with Imputed Values", xlab="Total Steps")
+```
+
+The mean and median are calculated again to see if imputing values have any effect on the data set.
+
+Mean and median with imputed values:
+```{r imputed means}
+mean(imputeAD[,sum(steps),by=date]$V1)
+median(imputeAD[,sum(steps),by=date]$V1)
+```
+
+Mean and median original values:
+```{r original means}
+mean(totalStepsByDay$total_steps)
+median(totalStepsByDay$total_steps)
+```
+
+As you can see,there is no material difference.
+
+## Are there differences in activity patterns between weekdays and weekends?
+To determine if there are any differences in activity patterns between weekday and weekend.  A factor variable was added to indicate day type (weekend or weekday). 
+
+```{r,message=F, warning=F}
+library(lubridate)
+library(chron)
+library(lattice)
+#add factor variable for day type as weekend or weekday
+imputeAD[,day_type:=factor(ifelse(is.weekend(imputeAD$date),"weekend","weekday"))]
+```
+
+A plot was then created to show the difference between weekend and weekday interval means.
+
+```{r panel plot}
+xyplot(step_mean~interval|day_type,imputeAD[,.(step_mean=mean(steps)),by=.(interval,day_type)], type='l',layout=c(1,2))
+```
+
+As you can see on weekdays it appears that there were fewer steps taken in the middle of the day when people are typically working.
